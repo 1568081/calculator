@@ -1,0 +1,66 @@
+---
+- hosts: localhost
+  become: True
+  vars:
+    l_health_results: []
+    d_curl_time: []
+    sorted_list: []
+
+    sites:
+      - https://www.google.com
+      - https://www.amazon.com
+      - https://test.com
+      - https://www.camelcamelcamel.com
+      
+  tasks:
+
+    - name: verify if all urls works properly
+      uri:
+        url: "{{ item }}"
+        timeout: 10
+        return_content: no
+      with_items: "{{ sites }}"
+      register: health_check
+      ignore_errors: yes
+
+    - name: write url based on the status code to variable l_health_results
+      set_fact:
+         l_health_results: "{{ l_health_results + [ item.url ] }}"
+      when: item.status == 200
+      with_items: "{{ health_check.results }}"
+
+    - debug:
+        msg: "{{ l_health_results }}"
+
+    - name: response times of sites via cURL via the `starttransfer` method
+      shell: 'curl {{ item }} -s -o /dev/null -w  "%{time_starttransfer}\n"'
+      register: curl_time
+      ignore_errors: True
+      args:
+        warn: false
+      with_items:
+        - "{{ l_health_results }}"
+
+    - name: write url and curl result to variable l_curl_time
+      set_fact:
+        d_curl_time: "{{ d_curl_time | default({}) | combine ({ item.stdout : item.item }) }}"
+      with_items: "{{ curl_time.results }}"
+
+    - set_fact:
+        sorted_list: "{{ sorted_list | default({})+ [item] }}"
+      loop: "{{ (d_curl_time|dictsort) }}"
+
+    - debug:
+        msg: "{{ sorted_list.0.1 |regex_replace('http://', '')}}"
+
+
+#    - set_fact:
+#        best_bet: "{{ sorted_list.1 }}"
+
+
+#   - debug:
+#       msg: best_bet
+
+
+#    - set_fact:
+#        best_bet: "{{ (sorted_list| items2dict(key_name='time', value_name='fqdn') }}"
